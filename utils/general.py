@@ -27,10 +27,18 @@ def pathInfo(category):
 def setLogger(name):
     return logging.getLogger(name)
 
-def configureLogger(fileName):
+def configureLogger(fileName, level="DEBUG"):
+    levelMap = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "CRITICAL": logging.CRITICAL
+    }
+    levelThreshold = levelMap[level]
+    
     logging.basicConfig(
         filename=f"utils/logs/{fileName}",
-        level=logging.DEBUG,
+        level=levelThreshold,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -56,7 +64,7 @@ class tableHandler:
             query = f"CREATE TABLE IF NOT EXISTS {tableName} (\n{",\n".join(params)}\n)"
             self.tableFieldInfo = tableMetaData[tableName]
             cursor.execute(query)
-            self.logger.info(f"Executed Query: {query}")
+            self.logger.debug(f"Executed Query: {query}")
             connection.commit()
         except Exception as e:
             self.logger.exception(str(e))
@@ -85,7 +93,6 @@ class tableHandler:
                 recordParams.append(item)
 
             cursor.execute(query, tuple(recordParams))
-            self.logger.info(f"Executed Query: {query} with params: {tuple(recordParams)}")
             connection.commit()
         except Exception as e:
             self.logger.exception(str(e))
@@ -103,7 +110,7 @@ class tableHandler:
                     LIMIT 1
                 """
             cursor.execute(query)
-            self.logger.info(f"Executed Query: {query}")
+            self.logger.debug(f"Executed Query: {query}")
 
             record = cursor.fetchone()
 
@@ -149,7 +156,7 @@ class tableHandler:
                 """
 
             cursor.execute(query)
-            self.logger.info(f"Executed Query: {query}")
+            self.logger.debug(f"Executed Query: {query}")
 
             record = cursor.fetchone()
 
@@ -176,28 +183,28 @@ class tableHandler:
         finally:
             connection.close()
 
-    def deleteRecord(self, recordID):
+    def deleteRecord(self, requestID):
         connection = sqlite3.connect(self.fileName)
         cursor = connection.cursor()
         try:
-            query = f"DELETE FROM {self.tableName} WHERE id = ?"
+            query = f"DELETE FROM {self.tableName} WHERE requestID = ?"
             cursor.execute(
                 query,
-                (recordID,)
+                (requestID,)
             )
-            self.logger.info(f"Deleted Record with ID: {recordID}")
+            self.logger.debug(f"Deleted Record with ID: {requestID}")
             connection.commit()
         except Exception as e:
             self.logger.exception(str(e))
         finally:
             connection.close()
 
-    def clearDB(self):
+    def clearTable(self):
         connection = sqlite3.connect(self.fileName)
         cursor = connection.cursor()
         try:
             cursor.execute(f"DELETE FROM {self.tableName}")
-            self.logger.info(f"Deleted table {self.tableName}")
+            self.logger.debug(f"Deleted table {self.tableName}")
         except Exception as e:
             self.logger.exception(str(e))
         finally:

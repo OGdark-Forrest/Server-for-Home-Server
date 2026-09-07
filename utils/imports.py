@@ -6,3 +6,5 @@ import os, sqlite3
 import base64
 
 import customtkinter as ctk
+
+import logging
