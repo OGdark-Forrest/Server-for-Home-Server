@@ -4,6 +4,7 @@ from utils.imports import *
 from toolFiles.textProcessing import Replace
 from toolFiles.toolInfo import getToolSchema, GetTools
 from toolFiles.fileTransfer import copyFile
+from toolFiles.test import Test
 
 class WebSocketConnection:
     def __init__(self):
@@ -40,8 +41,6 @@ class WebSocketConnection:
         while True:
             message = await self.webSocketListener.listen()
             self.jobHandler.addRecord(message)
-            # print("Job Received")
-            # pprint.pprint(message, indent=4)
 
     async def processJobs(self):
         while True:
@@ -77,11 +76,11 @@ class Selector:
     """
     In charge of getting job
     """
-    def __init__(self, dbHandler: general.tableHandler):
-        self.dbHandler = dbHandler
+    def __init__(self, tableHandler: general.tableHandler):
+        self.tableHandler = tableHandler
 
     def get(self):
-        return self.dbHandler.getAnyRecord()
+        return self.tableHandler.getAnyRecord()
 
 class Router:
     """
@@ -99,28 +98,33 @@ class Router:
         .
     }
     """
-    def __init__(self, dbHandler:general.tableHandler):
-        self.dbHandler = dbHandler
+    def __init__(self, tableHandler:general.tableHandler):
+        self.tableHandler = tableHandler
         self.routingTable = {
             "txtproc/replace": {
                 "status": "NONE",
-                "toolObj": Replace(self, self.dbHandler),
+                "toolObj": Replace(self, self.tableHandler),
                 "toolInfo": "Replaces characters in a string"
             },
             "toolinfo/getall": {
                 "status": "NONE",
-                "toolObj": GetTools(self, self.dbHandler),
+                "toolObj": GetTools(self, self.tableHandler),
                 "toolInfo": "Gets endpoints in routing table according to status type"
             },
             "toolinfo/getSchema": {
                 "status": "NONE",
-                "toolObj": getToolSchema(self, self.dbHandler),
+                "toolObj": getToolSchema(self, self.tableHandler),
                 "toolInfo": "Gets the schema of a specified endpoint"
             },
             "files/copysingle": {
                 "status": "NONE",
-                "toolObj": copyFile(self, self.dbHandler),
+                "toolObj": copyFile(self, self.tableHandler),
                 "toolInfo": "Copies a file into home server"
+            },
+            "test": {
+                "status": "NONE",
+                "toolObj": Test(self, self.tableHandler),
+                "toolInfo": "Miscellaneous"
             }
         }
         self.initStatus()
