@@ -2,6 +2,7 @@
 .venv/
 __pycache__/
 dbFiles/
+logFiles
 
 # Custom Files
 vpn.py
