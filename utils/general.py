@@ -24,6 +24,17 @@ def pathInfo(category):
     """
     return readJSON("utils/jsonFiles/utils/filePath.json")[category]
 
+def setLogger(name):
+    return logging.getLogger(name)
+
+def configureLogger(fileName):
+    logging.basicConfig(
+        filename=f"utils/logs/{fileName}",
+        level=logging.DEBUG,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
 class tableHandler:
     def __init__(self, fileName, tableName):
         tableMetaData = readJSON(pathInfo("jsonUtils")+"dbMetaData.json")
@@ -33,6 +44,7 @@ class tableHandler:
         connection = sqlite3.connect(self.fileName)
         cursor = connection.cursor()
 
+        self.logger = setLogger(f"TableHandler: {tableName}")
         self.fields = []
 
         try:
@@ -44,7 +56,10 @@ class tableHandler:
             query = f"CREATE TABLE IF NOT EXISTS {tableName} (\n{",\n".join(params)}\n)"
             self.tableFieldInfo = tableMetaData[tableName]
             cursor.execute(query)
+            self.logger.info(f"Executed Query: {query}")
             connection.commit()
+        except Exception as e:
+            self.logger.exception(str(e))
         finally:
             connection.close()
 
@@ -70,7 +85,10 @@ class tableHandler:
                 recordParams.append(item)
 
             cursor.execute(query, tuple(recordParams))
+            self.logger.info(f"Executed Query: {query} with params: {tuple(recordParams)}")
             connection.commit()
+        except Exception as e:
+            self.logger.exception(str(e))
         finally:
             connection.close()
 
@@ -85,6 +103,7 @@ class tableHandler:
                     LIMIT 1
                 """
             cursor.execute(query)
+            self.logger.info(f"Executed Query: {query}")
 
             record = cursor.fetchone()
 
@@ -97,15 +116,17 @@ class tableHandler:
                 mod = self.tableFieldInfo[field]["mods"]
 
                 if mod == "None":
-                    item = record[ind]
+                    item = record[ind+1]
                 elif mod == "integer":
-                    item = str(record[ind])
+                    item = str(record[ind+1])
                 elif mod == "dict":
-                    item = json.loads(record[ind])
+                    item = json.loads(record[ind+1])
 
                 returnDict[field] = item
 
             return returnDict
+        except Exception as e:
+            self.logger.exception(str(e))
         finally:
             connection.close()
 
@@ -128,6 +149,7 @@ class tableHandler:
                 """
 
             cursor.execute(query)
+            self.logger.info(f"Executed Query: {query}")
 
             record = cursor.fetchone()
 
@@ -149,6 +171,8 @@ class tableHandler:
                 returnDict[field] = item
 
             return returnDict
+        except Exception as e:
+            self.logger.exception(str(e))
         finally:
             connection.close()
 
@@ -156,12 +180,15 @@ class tableHandler:
         connection = sqlite3.connect(self.fileName)
         cursor = connection.cursor()
         try:
+            query = f"DELETE FROM {self.tableName} WHERE id = ?"
             cursor.execute(
-                f"DELETE FROM {self.tableName} WHERE id = ?",
+                query,
                 (recordID,)
             )
-
+            self.logger.info(f"Deleted Record with ID: {recordID}")
             connection.commit()
+        except Exception as e:
+            self.logger.exception(str(e))
         finally:
             connection.close()
 
@@ -170,5 +197,8 @@ class tableHandler:
         cursor = connection.cursor()
         try:
             cursor.execute(f"DELETE FROM {self.tableName}")
+            self.logger.info(f"Deleted table {self.tableName}")
+        except Exception as e:
+            self.logger.exception(str(e))
         finally:
             connection.close()
