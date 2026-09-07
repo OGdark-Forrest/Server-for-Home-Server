@@ -21,7 +21,7 @@ class Test:
         finally:
             self.job["result"] = output
             self.job["resultStatus"] = resultStatus
-            self.resultManager.addResult(self.job)
+            self.resultManager.addRecord(self.job)
             self.router.updateStatus("test", "AVAILABLE")
 
     def getStatus(self):
