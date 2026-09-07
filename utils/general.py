@@ -36,13 +36,13 @@ class tableHandler:
         self.fields = []
 
         try:
-            params = ["id PRIMARY KEY INTEGER AUTOINCREMENT"]
+            params = ["id INTEGER PRIMARY KEY AUTOINCREMENT"]
             for field in tableMetaData[tableName]:
                 args = tableMetaData[tableName][field]["params"]
                 params.append(f"{field} {" ".join(args)}")
                 self.fields.append(field)
             query = f"CREATE TABLE IF NOT EXISTS {tableName} (\n{",\n".join(params)}\n)"
-            self.tableFieldInfo = tableMetaData[field]
+            self.tableFieldInfo = tableMetaData[tableName]
             cursor.execute(query)
             connection.commit()
         finally:
@@ -115,6 +115,8 @@ class tableHandler:
         try:
             whereParams = []
             for param, val in zip(params, vals):
+                if self.tableFieldInfo[param]["mods"] == "None":
+                    val = f'"{val}"'
                 whereParams.append(f"{param}={val}")
 
             query = f"""
@@ -138,11 +140,11 @@ class tableHandler:
                 mod = self.tableFieldInfo[field]["mods"]
 
                 if mod == "None":
-                    item = record[ind]
+                    item = record[ind+1]
                 elif mod == "integer":
-                    item = str(record[ind])
+                    item = str(record[ind+1])
                 elif mod == "dict":
-                    item = json.loads(record[ind])
+                    item = json.loads(record[ind+1])
 
                 returnDict[field] = item
 
