@@ -9,15 +9,18 @@ from toolFiles.test import Test
 class WebSocketConnection:
     def __init__(self):
         self.isConnected = None
+        self.logger = general.setLogger("HomeServerArch.py: WebSocketConnection")
 
     async def startConnection(self, websocket:WebSocket):
         try:
             await websocket.accept()
             self.isConnected = True
             self.websocket = websocket
+            self.logger.info("Connected to Client")
             self.setComponents()
+            self.logger.info("Set listener components")
         except Exception as e:
-            raise e
+            self.logger.exception(str(e))
 
     def setComponents(self):
         self.jobHandler = general.tableHandler(general.pathInfo("db")+"server.db", "jobs")
@@ -38,11 +41,20 @@ class WebSocketConnection:
         )
 
     async def startListen(self):
+        self.logger.info("Started listener")
         while True:
             message = await self.webSocketListener.listen()
-            self.jobHandler.addRecord(message)
+            if message == "DOWN":
+                await asyncio.sleep(2)
+                self.logger.critical("Reattempting sender connection")
+            elif message == "NONE":
+                await asyncio.sleep(1)
+            else:
+                self.logger.info("Received job")
+                self.jobHandler.addRecord(message)
 
     async def processJobs(self):
+        self.logger.info("Started job process")
         while True:
             job = self.jobSelector.get()
 
@@ -50,18 +62,26 @@ class WebSocketConnection:
                 await asyncio.sleep(1)
                 continue
 
+            self.logger.info("Selected job being sent to router")
+
             while True:
-                if self.router.isReady(job) == "AVAILABLE":
-                    self.router.route(job)
-                    self.jobHandler.deleteRecord(job["id"])
+                status = self.router.route(job)
+
+                if status == "JOB ROUTED":
+                    self.logger.info(job)
+                    self.jobHandler.deleteRecord(job["requestID"])
+                    self.logger.info("JOB ROUTED AND DELETED FROM QUEUE")
                     break
-                elif self.router.isReady(job) == "DOWN":
+                elif status == "DOWN":
+                    self.jobHandler.deleteRecord(job["id"])
                     self.jobHandler.addRecord(job)
+                    self.logger.warning(f"Endpoint {job["requestID"]} is DOWN")
                     break
                 else:
                     await asyncio.sleep(1)
 
     async def sendResults(self):
+        self.logger.info("Started sender")
         while self.isConnected:
             result = self.resultSelector.get()
 
@@ -69,8 +89,15 @@ class WebSocketConnection:
                 await asyncio.sleep(0.1)
                 continue
 
-            await self.webSocketSender.send(result)
-            self.resultHandler.deleteRecord(result["id"])
+            self.logger.info("Received result to send")
+            status = await self.webSocketSender.send(result)
+            if status == "DOWN":
+                await asyncio.sleep(2)
+                self.logger.critical("Reattempting sender connection")
+            elif status == "NONE":
+                await asyncio.sleep(1)
+            else:
+                self.resultHandler.deleteRecord(result["requestID"])
 
 class Selector:
     """
@@ -80,7 +107,11 @@ class Selector:
         self.tableHandler = tableHandler
 
     def get(self):
-        return self.tableHandler.getAnyRecord()
+        for i in range(1, 5):
+            job = self.tableHandler.getRecordByVal(["priority"], [i])
+            if job is not None:
+                break
+        return job
 
 class Router:
     """
@@ -127,6 +158,7 @@ class Router:
                 "toolInfo": "Miscellaneous"
             }
         }
+        self.logger = general.setLogger("HomeServerArch.py: Router")
         self.initStatus()
 
     def isReady(self, job):
@@ -137,31 +169,37 @@ class Router:
             try:
                 toolObj = self.routingTable[endpoint]["toolObj"]
                 self.routingTable[endpoint]["status"] = toolObj.getStatus()
-            except:
+            except Exception as e:
+                self.logger.exception(str(e))
                 self.routingTable[endpoint]["status"] = "DOWN"
+        self.logger.info("Done Initializing")
 
     def updateStatus(self, endpoint, status):
         self.routingTable[endpoint]["status"] = status
 
     def route(self, job):
-        toolInfo = self.routingTable[job["endpoint"]]
+        if self.isReady(job) == "AVAILABLE":
+            toolInfo = self.routingTable[job["endpoint"]]
+            self.callTool(toolInfo["toolObj"], job)
+            return "JOB ROUTED"
 
-        return self.callTool(toolInfo["toolObj"], job)
+        return self.isReady(job)
 
     def callTool(self, toolObj, job):
         self.updateStatus(job["endpoint"], "BUSY")
-
+        toolObj.setJob(job)
         threading.Thread(
             target=toolObj.call,
-            args=(job, ),
             daemon=True
         ).start()
+        self.logger.debug("Started thread")
 
 class Listener:
     """
     Responsible for receiving data over a websocket connection.
     """
-    def __init__(self, websocket: WebSocket, webSocketConnection):
+    def __init__(self, websocket: WebSocket, webSocketConnection: WebSocketConnection):
+        self.logger = general.setLogger("HomeServerArch.py: Listener")
         self.webSocketConnection = webSocketConnection
         self.websocket = websocket
         self.isListening = None
@@ -173,23 +211,35 @@ class Listener:
                 job = await self.websocket.receive_text()
                 return json.loads(job)
         except:
-            print("Websocket Disconnected")
+            if self.webSocketConnection.isConnected is True:
+                self.logger.critical("LISTENER IS DOWN")
+                self.webSocketConnection.isConnected = False
+                return "DOWN"
             self.isListening = False
             self.webSocketConnection.isConnected = False
+            return "NONE"
 
 class Sender:
     """
     Responsible for sending data over a websocket connection.
     """
-    def __init__(self, websocket: WebSocket, webSocketConnection):
+    def __init__(self, websocket: WebSocket, webSocketConnection: WebSocketConnection):
         self.webSocketConnection = webSocketConnection
         self.websocket = websocket
         self.isSending = None
+        self.logger = general.setLogger("HomeServerArch.py: Sender")
 
     async def send(self, data: dict):
         try:
             await self.websocket.send_json(data)
             self.isSending = True
+            return "SUCCESSFUL"
         except:
+            returnStatus = None
+            if self.webSocketConnection.isConnected is True:
+                self.logger.critical("SENDER IS DOWN")
+                returnStatus = "DOWN"
             self.isSending = False
             self.webSocketConnection.isConnected = False
+            returnStatus = "NONE"
+            return returnStatus
